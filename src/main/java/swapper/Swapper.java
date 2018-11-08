@@ -1,9 +1,6 @@
 package swapper;
 
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.LinkedList;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -38,20 +35,9 @@ public class Swapper<T> {
 	}
 
 
-	final boolean debug;
-	Set<WaitingRequest> requests = new HashSet<>();
+	Set<WaitingRequest> requests = new LinkedHashSet<>();
 	Set<T> set = new HashSet<>();
 	Semaphore mutex = new Semaphore(1, true);
-
-	public Swapper() {
-		this(false);
-	}
-
-	public Swapper(boolean debug) {
-		this.debug = debug;
-	}
-
-
 
 	private void remove(Collection<T> c) {
 		set.removeAll(c);
