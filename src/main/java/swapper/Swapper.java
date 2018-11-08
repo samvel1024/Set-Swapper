@@ -1,8 +1,9 @@
 package swapper;
 
-import java.util.*;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.Set;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -32,7 +33,7 @@ public class Swapper<T> {
 
 		@Override
 		public int hashCode() {
-			return Objects.hash(id);
+			return (int) id;
 		}
 	}
 
@@ -50,32 +51,27 @@ public class Swapper<T> {
 		this.debug = debug;
 	}
 
-	private void log(String format, Object... args) {
-		if (!debug) return;
-		String prefix = String.format("[Thread: %s]\t", Thread.currentThread().getName());
-		System.out.println(String.format(prefix + format, args));
-	}
 
 
 	private void remove(Collection<T> c) {
 		set.removeAll(c);
-		log("Removed elements %s", c);
+		Log.debug("Removed elements %s", c);
 	}
 
 	private void add(Collection<T> add) {
 		set.addAll(add);
-		log("Added elements %s", add);
+		Log.debug("Added elements %s", add);
 	}
 
 	private void releaseWaiting(Collection<T> add) {
-		log("Releasing waiting threads");
+		Log.debug("Releasing waiting threads");
 		add(add);
 		Collection<WaitingRequest> tbr = new LinkedList<>();
 		for (WaitingRequest r : requests) {
 			if (set.containsAll(r.remove)) {
 				remove(r.remove);
 				tbr.add(r);
-				log("Releasing %s", r.waitingThread);
+				Log.debug("Releasing %s", r.waitingThread);
 				r.semaphore.release();
 			}
 		}
@@ -85,17 +81,16 @@ public class Swapper<T> {
 	public void swap(Collection<T> rem, Collection<T> add) throws InterruptedException {
 		mutex.acquire();
 		if (!set.containsAll(rem)) {
-			log("Set does not contain %s", rem);
+			Log.debug("Set does not contain %s", rem);
 
 			Semaphore s = new Semaphore(0);
 			requests.add(new WaitingRequest(Thread.currentThread().getName(), s, rem));
 			mutex.release();
-			log("Waiting for %s", rem);
+			Log.debug("Waiting for %s", rem);
 			s.acquire();
 
 
-
-			log("Woke up from waiting");
+			Log.debug("Woke up from waiting");
 			mutex.acquire();
 			releaseWaiting(add);
 			mutex.release();
@@ -106,6 +101,14 @@ public class Swapper<T> {
 			mutex.release();
 		}
 
+	}
+
+	/**
+	 * Not thread safe
+	 */
+	public void clear(){
+		this.set.clear();
+		this.requests.clear();
 	}
 
 }

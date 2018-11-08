@@ -22,7 +22,7 @@ public class Test implements Runnable {
 		try {
 			swp.swap(a, b);
 		} catch (InterruptedException e) {
-			e.printStackTrace();
+			e.printStackTrace(System.out);
 			Thread.currentThread().interrupt();
 		}
 	}
