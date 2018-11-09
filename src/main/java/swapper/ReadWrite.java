@@ -9,15 +9,25 @@ import java.util.stream.IntStream;
 import static java.util.Arrays.asList;
 import static java.util.Collections.*;
 
+/**
+ * Readers and writers problem for given maximum amount of N readers
+ * Swappper initially equals to {0, 1, 2 ... N}
+ * Reader owns elements 0 and i-th reader owns element i
+ * Writer thread acquires all elements from swapper to prevent anyone accessing the guarded object
+ * i-th reader thread acquires {0, i} to prevent the writer from writing
+ * ThreadLocal is used to store the reader id per thread
+ *
+ * Example usage {@link swapper.Test.ReadWriteTest)}
+ *
+ */
 public class ReadWrite<T> {
 
 	private final AtomicInteger readerIdSequence = new AtomicInteger(1);
 	private final ThreadLocal<Integer> readerId = new ThreadLocal<>();
 	private final T guardedObject;
 	private final Swapper<Integer> swp = new Swapper<>();
-
-	private int maxReader;
 	private final Collection<Integer> all;
+	private final int maxReader;
 
 	public ReadWrite(T guardedObject, int maxReader) {
 		this.guardedObject = guardedObject;
@@ -31,6 +41,7 @@ public class ReadWrite<T> {
 		}
 	}
 
+
 	public int getMaxReader() {
 		return maxReader;
 	}
@@ -38,8 +49,11 @@ public class ReadWrite<T> {
 	public void mutate(Consumer<T> cons) throws InterruptedException {
 		swp.swap(all, emptySet());
 		Log.debug("Mutating state");
-		cons.accept(guardedObject);
-		swp.swap(emptyList(), all);
+		try {
+			cons.accept(guardedObject);
+		} finally {
+			swp.swap(emptyList(), all);
+		}
 	}
 
 	public void read(Consumer<T> cons) throws InterruptedException {
@@ -51,66 +65,12 @@ public class ReadWrite<T> {
 		int mId = this.readerId.get();
 		swp.swap(asList(0, mId), singleton(0));
 		Log.debug("Reading from reader %d", mId);
-		cons.accept(guardedObject);
-		swp.swap(emptySet(), singleton(mId));
-	}
-
-
-	private static class TestClass {
-		int val = 0;
-
-	}
-
-	private static volatile boolean running = true;
-
-
-	public static void main(String[] args) throws InterruptedException {
-
-		ReadWrite<TestClass> readWrite = new ReadWrite<>(new TestClass(), 3);
-
-		Runnable reader = () -> {
-			while (running) {
-				try {
-					readWrite.read(obj -> Log.debug("Reading value %d", obj.val));
-				} catch (InterruptedException e) {
-					e.printStackTrace();
-					Thread.currentThread().interrupt();
-				}
-			}
-		};
-
-		for (int i = 0; i < readWrite.getMaxReader(); ++i) {
-			Thread thread = new Thread(reader, "Reader-" + i);
-			thread.start();
+		try {
+			cons.accept(guardedObject);
+		} finally {
+			swp.swap(emptySet(), singleton(mId));
 		}
-
-		Thread writer = new Thread(() -> {
-			while (running) {
-				try {
-					readWrite.mutate(obj -> {
-						obj.val++;
-						Log.debug("Set value %d", obj.val);
-						try {
-							Thread.sleep(1000);
-						} catch (InterruptedException e) {
-							e.printStackTrace();
-							Thread.currentThread().interrupt();
-						}
-					});
-				} catch (InterruptedException e) {
-					e.printStackTrace();
-					Thread.currentThread().interrupt();
-				}
-			}
-		}, "Writer");
-
-		writer.start();
-
-
-		Thread.sleep(5000);
-		running = false;
-
-
 	}
+
 
 }

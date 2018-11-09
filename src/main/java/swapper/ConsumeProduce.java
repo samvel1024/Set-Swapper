@@ -19,7 +19,7 @@ import static java.util.Collections.singleton;
  * Initially swp is initialized as {N, N + 1, ... , 2 * N - 1}
  * Atomic integer instances are used for assigning indices to each consumer and producer iteration
  * <p>
- * Example usage {@link #main(String[])}
+ * Example usage {@link swapper.Test.ConsumeProduceTest)}
  */
 public class ConsumeProduce<T> {
 
@@ -52,10 +52,12 @@ public class ConsumeProduce<T> {
 						throw new IllegalStateException();
 					}
 
-					buffer[writeIdx] = supplier.get();
-					Log.debug("Writing at position %d %s", writeIdx, buffer[writeIdx]);
-
-					swp.swap(emptySet(), singleton(writeIdx));
+					try {
+						buffer[writeIdx] = supplier.get();
+						Log.debug("Writing at position %d %s", writeIdx, buffer[writeIdx]);
+					} finally {
+						swp.swap(emptySet(), singleton(writeIdx));
+					}
 				} catch (InterruptedException e) {
 					e.printStackTrace(System.out);
 					Thread.currentThread().interrupt();
@@ -80,10 +82,13 @@ public class ConsumeProduce<T> {
 						throw new IllegalStateException();
 					}
 
-					Log.debug("Reading from position %d %s", readIdx, buffer[readIdx]);
-					consumer.accept(buffer[readIdx]);
-					buffer[readIdx] = null;
-					swp.swap(emptySet(), singleton(buffer.length + readIdx));
+					try {
+						Log.debug("Reading from position %d %s", readIdx, buffer[readIdx]);
+						consumer.accept(buffer[readIdx]);
+						buffer[readIdx] = null;
+					} finally {
+						swp.swap(emptySet(), singleton(buffer.length + readIdx));
+					}
 
 				} catch (InterruptedException e) {
 					e.printStackTrace(System.out);
@@ -135,26 +140,4 @@ public class ConsumeProduce<T> {
 	}
 
 
-	public static void main(String[] args) throws InterruptedException {
-		ConsumeProduce<Integer> p = new ConsumeProduce<>(
-			Integer.class,
-			(a) -> Log.debug("Consuming message %s", a),
-			new Supplier<Integer>() {
-				int a = 0;
-
-				@Override
-				public Integer get() {
-					return a++;
-				}
-			},
-			10,
-			10,
-			10
-		);
-		p.start();
-		Thread.sleep(51000);
-		p.stop();
-
-
-	}
 }
