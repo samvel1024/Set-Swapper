@@ -1,13 +1,18 @@
 package swapper;
 
-import java.util.*;
-import java.util.concurrent.Semaphore;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedList;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 public class Swapper<T> {
 
-	private final Collection<WaitingThread> requests = new LinkedList<>();
-	private final Set<T> set = new HashSet<>();
-	private final Semaphore mutex = new Semaphore(1, true);
+	private final Collection<WaitingThread> queue = new LinkedList<>();
+	private final Collection<T> set = new HashSet<>();
+	private final Lock mutex = new ReentrantLock();
 
 	private void remove(Collection<T> c) {
 		set.removeAll(c);
@@ -22,49 +27,46 @@ public class Swapper<T> {
 	private void releaseWaiting(Collection<T> add) {
 		Log.debug("Releasing waiting threads");
 		add(add);
-		for (Iterator<WaitingThread> it = requests.iterator(); it.hasNext(); ) {
+		for (Iterator<WaitingThread> it = queue.iterator(); it.hasNext(); ) {
 			WaitingThread r = it.next();
 			if (set.containsAll(r.remove)) {
 				remove(r.remove);
 				Log.debug("Releasing %s", r.waitingThread);
-				r.semaphore.release();
+				r.processed = true;
+				r.condition.signal();
 				it.remove();
 			}
 		}
 	}
 
 	public void swap(Collection<T> rem, Collection<T> add) throws InterruptedException {
-		mutex.acquire();
+		mutex.lock();
 		if (!set.containsAll(rem)) {
 			Log.debug("Set does not contain %s", rem);
 
-			Semaphore s = new Semaphore(0);
-			requests.add(new WaitingThread(Thread.currentThread().getName(), s, rem));
-			mutex.release();
+			Condition cond = mutex.newCondition();
+			WaitingThread request = new WaitingThread(Thread.currentThread().getName(), cond, rem);
+			queue.add(request);
 			Log.debug("Waiting for %s", rem);
-			s.acquire();
-
-
-			Log.debug("Woke up from waiting");
-			mutex.acquire();
-			releaseWaiting(add);
-			mutex.release();
+			while (!request.processed) {
+				cond.await();
+			}
+			Log.debug("Woke up from waiting for to be removed elements");
+			try {
+				releaseWaiting(add);
+			} finally {
+				mutex.unlock();
+			}
 
 		} else {
-			remove(rem);
-			releaseWaiting(add);
-			mutex.release();
-		}
-
-	}
-
-	final Object lock = new Object();
-	public void swp(Collection<T> rem, Collection<T> add) throws InterruptedException {
-		synchronized (lock){
-			while(!set.containsAll(rem)){
-
+			try {
+				remove(rem);
+				releaseWaiting(add);
+			} finally {
+				mutex.unlock();
 			}
 		}
+
 	}
 
 	/**
@@ -72,21 +74,29 @@ public class Swapper<T> {
 	 */
 	public void clear() {
 		this.set.clear();
-		this.requests.clear();
+		this.queue.clear();
 	}
 
 	private class WaitingThread {
 
 		final String waitingThread;
-		final Semaphore semaphore;
-		final Set<T> remove;
+		final Condition condition;
+		final Collection<T> remove;
+		/**
+		 * processed is true only after the requested
+		 * items in remove are removed from the set
+		 */
+		volatile boolean processed = false;
 
-		public WaitingThread(String waitingThread, Semaphore semaphore, Collection<T> remove) {
+		public WaitingThread(String waitingThread, Condition condition, Collection<T> remove) {
 			this.waitingThread = waitingThread;
-			this.semaphore = semaphore;
+			this.condition = condition;
 			this.remove = new HashSet<>(remove);
 		}
 
+		void finishedProcessing() {
+			this.processed = true;
+		}
 	}
 
 }

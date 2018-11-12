@@ -16,9 +16,7 @@ import static java.util.Collections.singletonList;
 
 public class Test {
 
-	/**
-	 * Runs all tests
-	 */
+
 	public static void main(String[] args) {
 		Runnable[] all = new Runnable[]{
 			new ReadWriteTest()
@@ -36,9 +34,6 @@ public class Test {
 		CountDownLatch latch = new CountDownLatch(5);
 
 
-		public static void main(String[] args) {
-			new SmallSwapperTest().run();
-		}
 
 		Thread spawn(Runnable r) {
 			return new Thread(() -> {
@@ -176,15 +171,9 @@ public class Test {
 			Thread writer = new Thread(() -> {
 				while (running) {
 					try {
-						readWrite.mutate(obj -> {
+						readWrite.write(obj -> {
 							obj.val++;
 							Log.debug("Set value %d", obj.val);
-							try {
-								Thread.sleep(1000);
-							} catch (InterruptedException e) {
-								e.printStackTrace();
-								Thread.currentThread().interrupt();
-							}
 						});
 					} catch (InterruptedException e) {
 						e.printStackTrace();

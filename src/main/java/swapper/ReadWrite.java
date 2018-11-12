@@ -46,7 +46,7 @@ public class ReadWrite<T> {
 		return maxReader;
 	}
 
-	public void mutate(Consumer<T> cons) throws InterruptedException {
+	public void write(Consumer<T> cons) throws InterruptedException {
 		swp.swap(all, emptySet());
 		Log.debug("Mutating state");
 		try {
