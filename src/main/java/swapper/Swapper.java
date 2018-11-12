@@ -4,15 +4,13 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
-import java.util.concurrent.locks.Condition;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.Semaphore;
 
 public class Swapper<T> {
 
 	private final Collection<WaitingThread> queue = new LinkedList<>();
 	private final Collection<T> set = new HashSet<>();
-	private final Lock mutex = new ReentrantLock();
+	private final Semaphore mutex = new Semaphore(1, true);
 
 	private void remove(Collection<T> c) {
 		set.removeAll(c);
@@ -32,30 +30,28 @@ public class Swapper<T> {
 			if (set.containsAll(r.remove)) {
 				remove(r.remove);
 				Log.debug("Releasing %s", r.waitingThread);
-				r.processed = true;
-				r.condition.signal();
+				r.semaphore.release();
 				it.remove();
 			}
 		}
 	}
 
 	public void swap(Collection<T> rem, Collection<T> add) throws InterruptedException {
-		mutex.lock();
+		mutex.acquire();
 		if (!set.containsAll(rem)) {
 			Log.debug("Set does not contain %s", rem);
 
-			Condition cond = mutex.newCondition();
-			WaitingThread request = new WaitingThread(Thread.currentThread().getName(), cond, rem);
-			queue.add(request);
+			Semaphore s = new Semaphore(0);
+			queue.add(new WaitingThread(Thread.currentThread().getName(), s, rem));
+			mutex.release();
 			Log.debug("Waiting for %s", rem);
-			while (!request.processed) {
-				cond.await();
-			}
+			s.acquire();
 			Log.debug("Woke up from waiting for to be removed elements");
+			mutex.acquire();
 			try {
 				releaseWaiting(add);
 			} finally {
-				mutex.unlock();
+				mutex.release();
 			}
 
 		} else {
@@ -63,7 +59,7 @@ public class Swapper<T> {
 				remove(rem);
 				releaseWaiting(add);
 			} finally {
-				mutex.unlock();
+				mutex.release();
 			}
 		}
 
@@ -80,23 +76,15 @@ public class Swapper<T> {
 	private class WaitingThread {
 
 		final String waitingThread;
-		final Condition condition;
+		final Semaphore semaphore;
 		final Collection<T> remove;
-		/**
-		 * processed is true only after the requested
-		 * items in remove are removed from the set
-		 */
-		volatile boolean processed = false;
 
-		public WaitingThread(String waitingThread, Condition condition, Collection<T> remove) {
+		public WaitingThread(String waitingThread, Semaphore semaphore, Collection<T> remove) {
 			this.waitingThread = waitingThread;
-			this.condition = condition;
+			this.semaphore = semaphore;
 			this.remove = new HashSet<>(remove);
 		}
 
-		void finishedProcessing() {
-			this.processed = true;
-		}
 	}
 
 }
